@@ -6,7 +6,7 @@ from collections import defaultdict
 from functools import wraps
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from cachetools import TTLCache
+# from cachetools import TTLCache          # Removido porque não será mais usado
 from typing import Tuple
 from proto import FreeFire_pb2, main_pb2, AccountPersonalShow_pb2
 from google.protobuf import json_format, message
@@ -25,7 +25,7 @@ SUPPORTED_REGIONS = {"IND", "BR", "US", "SAC", "NA", "SG", "RU", "ID", "TW", "VN
 # === Flask App Setup ===
 app = Flask(__name__)
 CORS(app)
-cache = TTLCache(maxsize=100, ttl=300)
+# cache = TTLCache(maxsize=100, ttl=300)   # Removido
 cached_tokens = defaultdict(dict)
 
 # === Helper Functions ===
@@ -135,28 +135,13 @@ async def GetAccountInformation(uid, unk, region, endpoint):
         resp = await client.post(server+endpoint, data=data_enc, headers=headers)
         return json.loads(json_format.MessageToJson(decode_protobuf(resp.content, AccountPersonalShow_pb2.AccountPersonalShowInfo)))
 
-# === Caching Decorator ===
-def cached_endpoint(ttl=300):
-    def decorator(fn):
-        @wraps(fn)
-        def wrapper(*a, **k):
-            key = (request.path, tuple(request.args.items()))
-            if key in cache:
-                return cache[key]
-            res = fn(*a, **k)
-            cache[key] = res
-            return res
-        return wrapper
-    return decorator
-
-# === Flask Routes ===
+# === (Decorador de cache removido) ===
+# @cached_endpoint()   # <-- REMOVIDO
 @app.route('/player-info')
-@cached_endpoint()
 def get_account_info():
     region = request.args.get('region')
     uid = request.args.get('uid')
 
-    # Pehle basic validation
     if not uid:
         return jsonify({"error": "Please provide UID."}), 400
 
@@ -164,15 +149,10 @@ def get_account_info():
         return jsonify({"error": "Please provide REGION."}), 400
 
     try:
-        # API call
         return_data = asyncio.run(GetAccountInformation(uid, "7", region, "/GetPlayerPersonalShow"))
-
-        # Agar data mila toh usko beautify karke bhejo
         formatted_json = json.dumps(return_data, indent=2, ensure_ascii=False)
         return formatted_json, 200, {'Content-Type': 'application/json; charset=utf-8'}
-
     except Exception as e:
-        # Agar koi error aaye toh yeh catch karega
         return jsonify({"error": "Invalid UID or Region. Please check and try again."}), 500
 
 @app.route('/refresh', methods=['GET','POST'])
